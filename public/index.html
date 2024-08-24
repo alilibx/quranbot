@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إدارة بوت القرآن</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; text-align: right; }
+        input, textarea, select { width: 100%; padding: 5px; margin-bottom: 10px; font-family: inherit; }
+        button { padding: 10px; background-color: #4CAF50; color: white; border: none; cursor: pointer; font-family: inherit; margin-right: 5px; }
+        #participantList { margin-top: 20px; }
+        .participant { border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; }
+        .send-button { background-color: #008CBA; }
+    </style>
+</head>
+<body>
+    <h1>إدارة بوت القرآن</h1>
+
+    <h2>إضافة مشارك</h2>
+    <input type="text" id="name" placeholder="الاسم">
+    <input type="text" id="phone" placeholder="رقم الهاتف (مع رمز البلد)">
+    <input type="number" id="juz" placeholder="رقم الجزء الأولي" min="1" max="30">
+    <button onclick="addParticipant()">إضافة مشارك</button>
+
+    <h2>تخصيص الرسالة</h2>
+    <textarea id="messageTemplate" rows="4"></textarea>
+    <button onclick="saveMessage()">حفظ الرسالة</button>
+
+    <h2>إرسال الرسائل</h2>
+    <select id="sendOption">
+        <option value="all">إرسال إلى الجميع</option>
+        <option value="individual">إرسال إلى مشارك محدد</option>
+    </select>
+    <select id="participantSelect" style="display: none;"></select>
+    <button onclick="sendMessages()" class="send-button">إرسال الرسائل</button>
+
+    <h2>المشاركون</h2>
+    <div id="participantList"></div>
+
+    <script>
+        let participants = [];
+        let messageTemplate = '';
+
+        async function loadParticipants() {
+            try {
+                const response = await fetch('/api/participants');
+                participants = await response.json();
+                updateParticipantList();
+                updateParticipantSelect();
+            } catch (error) {
+                console.error('Error loading participants:', error);
+                alert('حدث خطأ أثناء تحميل بيانات المشاركين');
+            }
+        }
+
+        async function loadMessageTemplate() {
+            try {
+                const response = await fetch('/api/message-template');
+                const data = await response.json();
+                messageTemplate = data.template;
+                document.getElementById('messageTemplate').value = messageTemplate;
+            } catch (error) {
+                console.error('Error loading message template:', error);
+                alert('حدث خطأ أثناء تحميل قالب الرسالة');
+            }
+        }
+
+        async function addParticipant() {
+            const name = document.getElementById('name').value;
+            const phone = document.getElementById('phone').value;
+            const juz = document.getElementById('juz').value;
+            if (name && phone && juz) {
+                try {
+                    const response = await fetch('/api/add-participant', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ name, number: `${phone}@c.us`, juz: parseInt(juz) }),
+                    });
+                    if (response.ok) {
+                        await loadParticipants();
+                        clearInputs();
+                        alert('تمت إضافة المشارك بنجاح');
+                    } else {
+                        alert('حدث خطأ أثناء إضافة المشارك');
+                    }
+                } catch (error) {
+                    console.error('Error adding participant:', error);
+                    alert('حدث خطأ أثناء إضافة المشارك');
+                }
+            } else {
+                alert('الرجاء ملء جميع الحقول');
+            }
+        }
+
+        async function saveMessage() {
+            messageTemplate = document.getElementById('messageTemplate').value;
+            try {
+                const response = await fetch('/api/update-template', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ template: messageTemplate }),
+                });
+                if (response.ok) {
+                    alert('تم حفظ قالب الرسالة');
+                } else {
+                    alert('حدث خطأ أثناء حفظ قالب الرسالة');
+                }
+            } catch (error) {
+                console.error('Error saving message template:', error);
+                alert('حدث خطأ أثناء حفظ قالب الرسالة');
+            }
+        }
+
+        function updateParticipantList() {
+            const list = document.getElementById('participantList');
+            list.innerHTML = '';
+            participants.forEach((p, index) => {
+                const div = document.createElement('div');
+                div.className = 'participant';
+                div.innerHTML = `
+                    <strong>${p.name}</strong><br>
+                    الهاتف: ${p.number.replace('@c.us', '')}<br>
+                    الجزء: ${p.juz}
+                    <button onclick="removeParticipant(${index})">إزالة</button>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        function updateParticipantSelect() {
+            const select = document.getElementById('participantSelect');
+            select.innerHTML = '';
+            participants.forEach((p, index) => {
+                const option = document.createElement('option');
+                option.value = index;
+                option.textContent = p.name;
+                select.appendChild(option);
+            });
+        }
+
+        async function removeParticipant(index) {
+            try {
+                const response = await fetch('/api/remove-participant', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ index }),
+                });
+                if (response.ok) {
+                    await loadParticipants();
+                    alert('تمت إزالة المشارك بنجاح');
+                } else {
+                    alert('حدث خطأ أثناء إزالة المشارك');
+                }
+            } catch (error) {
+                console.error('Error removing participant:', error);
+                alert('حدث خطأ أثناء إزالة المشارك');
+            }
+        }
+
+        function clearInputs() {
+            document.getElementById('name').value = '';
+            document.getElementById('phone').value = '';
+            document.getElementById('juz').value = '';
+        }
+
+        async function sendMessages() {
+            const sendOption = document.getElementById('sendOption').value;
+            const participantSelect = document.getElementById('participantSelect');
+            
+            if (sendOption === 'all') {
+                await sendToAll();
+            } else if (sendOption === 'individual' && participantSelect.value !== '') {
+                const index = parseInt(participantSelect.value);
+                await sendMessage(participants[index]);
+            }
+        }
+
+        async function sendMessage(participant) {
+            try {
+                const response = await fetch('/api/send-message', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        number: participant.number,
+                        name: participant.name
+                    }),
+                });
+                const result = await response.json();
+                if (result.success) {
+                    alert('تم إرسال الرسالة بنجاح');
+                } else {
+                    alert('حدث خطأ أثناء إرسال الرسالة');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('حدث خطأ أثناء إرسال الرسالة');
+            }
+        }
+
+        async function sendToAll() {
+            try {
+                const response = await fetch('/api/send-all', {
+                    method: 'POST',
+                });
+                const result = await response.json();
+                if (result.success) {
+                    alert('تم إرسال جميع الرسائل بنجاح');
+                } else {
+                    alert('حدث خطأ أثناء إرسال الرسائل');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('حدث خطأ أثناء إرسال الرسائل');
+            }
+        }
+
+        document.getElementById('sendOption').addEventListener('change', function() {
+            const participantSelect = document.getElementById('participantSelect');
+            participantSelect.style.display = this.value === 'individual' ? 'block' : 'none';
+        });
+
+        // Initialize
+        loadParticipants();
+        loadMessageTemplate();
+    </script>
+</body>
+</html>
